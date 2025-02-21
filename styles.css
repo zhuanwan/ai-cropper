@@ -72,7 +72,6 @@ button:disabled {
   position: relative;
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
 }
 
 .preview-container img,
@@ -87,14 +86,12 @@ button:disabled {
   width: 100%;
   max-width: 100%;
   margin: 0 auto;
-  overflow: hidden;
 }
 
 .document-editor > div {
   position: relative;
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
 }
 
 .document-editor img {
