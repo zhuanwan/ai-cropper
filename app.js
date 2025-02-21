@@ -262,20 +262,33 @@ class DocumentScanner {
       // 获取图像数据
       const imgData = context.getImageData(0, 0, this.canvas.width, this.canvas.height);
 
-      // 创建图片元素
+      // 创建图片元素并等待加载
       const img = new Image();
-      img.onload = () => {
-        // 创建编辑器
-        this.createDocumentEditor(img);
-        // 显示确认按钮
-        this.confirmBtn.style.display = "inline-block";
-        // 禁用拍摄按钮
-        this.captureBtn.disabled = true;
-        this.isCameraActive = false;
-      };
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = this.canvas.toDataURL("image/jpeg");
+      });
 
-      // 将 canvas 转换为图片源
-      img.src = this.canvas.toDataURL("image/jpeg");
+      // 清除预览区域
+      this.preview.innerHTML = "";
+
+      // 创建编辑器
+      this.createDocumentEditor(img);
+
+      // 显示确认按钮
+      this.confirmBtn.style.display = "inline-block";
+
+      // 禁用拍摄按钮
+      this.captureBtn.disabled = true;
+      this.isCameraActive = false;
+
+      // 添加到历史记录
+      this.imageHistory.push({
+        src: img.src,
+        isProcessed: false,
+      });
+      this.currentImageIndex = this.imageHistory.length - 1;
     } catch (err) {
       console.error("拍摄失败:", err);
       alert("拍摄失败，请重试");
@@ -426,46 +439,40 @@ class DocumentScanner {
     }
   }
 
-  async handleFileUpload(event) {
-    const file = event.target.files[0];
+  async handleFileUpload(e) {
+    const file = e.target.files[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      alert("请选择图片文件");
-      return;
-    }
-
     try {
-      const img = await this.loadImage(file);
-      if (!img.width || !img.height) {
-        throw new Error("图像加载失败");
-      }
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+      });
 
-      // 初始化四个角点
-      const corners = [
-        { x: 0, y: 0 },
-        { x: img.width, y: 0 },
-        { x: img.width, y: img.height },
-        { x: 0, y: img.height },
-      ];
+      // 清除预览区域
+      this.preview.innerHTML = "";
+
+      // 创建编辑器
+      this.createDocumentEditor(img);
+
+      // 显示确认按钮
+      this.confirmBtn.style.display = "inline-block";
 
       // 添加到历史记录
       this.imageHistory.push({
         src: img.src,
-        corners: corners,
         isProcessed: false,
       });
       this.currentImageIndex = this.imageHistory.length - 1;
-
-      // 显示当前图片
-      this.showCurrentImage();
-
-      // 清空文件输入框
-      this.fileInput.value = "";
     } catch (err) {
-      console.error("图片处理失败:", err);
-      alert("图片处理失败，请重试");
+      console.error("文件加载失败:", err);
+      alert("文件加载失败，请重试");
     }
+
+    // 清除文件输入，允许重复选择相同文件
+    this.fileInput.value = "";
   }
 
   loadImage(source) {
