@@ -17,6 +17,7 @@ class DocumentScanner {
     this.imageHistoryContainer = document.getElementById("imageHistory");
     this.savedImages = []; // 存储已保存的图片
     this.editingImageIndex = undefined; // 添加编辑图片索引
+    this.isCameraActive = true; // 添加相机状态标记
 
     this.confirmBtn.onclick = () => this.applyPerspectiveCorrection();
 
@@ -244,7 +245,9 @@ class DocumentScanner {
     });
   }
 
-  captureImage() {
+  async captureImage() {
+    if (!this.isCameraActive) return;
+
     try {
       const context = this.canvas.getContext("2d");
       this.canvas.width = this.video.videoWidth;
@@ -256,53 +259,23 @@ class DocumentScanner {
 
       context.drawImage(this.video, 0, 0);
 
-      // 获取图像数据并进行处理
+      // 获取图像数据
       const imgData = context.getImageData(0, 0, this.canvas.width, this.canvas.height);
-      const processedMat = this.processImage(imgData);
 
-      if (processedMat) {
-        try {
-          // 将处理后的 Mat 转换为 ImageData
-          let processedImgData = new ImageData(
-            new Uint8ClampedArray(processedMat.data),
-            processedMat.cols,
-            processedMat.rows
-          );
+      // 创建图片元素
+      const img = new Image();
+      img.onload = () => {
+        // 创建编辑器
+        this.createDocumentEditor(img);
+        // 显示确认按钮
+        this.confirmBtn.style.display = "inline-block";
+        // 禁用拍摄按钮
+        this.captureBtn.disabled = true;
+        this.isCameraActive = false;
+      };
 
-          // 创建新的 canvas 来显示处理后的图像
-          const processedCanvas = document.createElement("canvas");
-          processedCanvas.width = processedMat.cols;
-          processedCanvas.height = processedMat.rows;
-          const processedContext = processedCanvas.getContext("2d");
-          processedContext.putImageData(processedImgData, 0, 0);
-
-          // 创建预览图像
-          const img = document.createElement("img");
-          img.src = processedCanvas.toDataURL("image/jpeg");
-          this.preview.appendChild(img);
-          this.captures.push(img.src);
-          this.saveBtn.disabled = false;
-
-          // 添加到历史记录
-          this.imageHistory.push({
-            src: img.src,
-            isProcessed: true,
-          });
-          this.currentImageIndex = this.imageHistory.length - 1;
-
-          // 显示处理后的图片
-          this.showCurrentImage();
-
-          // 清理内存
-          processedMat.delete();
-        } catch (err) {
-          console.error("图像转换失败:", err);
-          // 使用原始图像作为备选
-          this.useOriginalImage();
-        }
-      } else {
-        this.useOriginalImage();
-      }
+      // 将 canvas 转换为图片源
+      img.src = this.canvas.toDataURL("image/jpeg");
     } catch (err) {
       console.error("拍摄失败:", err);
       alert("拍摄失败，请重试");
@@ -366,6 +339,10 @@ class DocumentScanner {
       this.currentEditor = null;
       this.preview.innerHTML = "";
       this.saveBtn.disabled = true;
+
+      // 在保存完成后启用拍摄按钮
+      this.captureBtn.disabled = false;
+      this.isCameraActive = true;
     } catch (err) {
       console.error("保存失败:", err);
       alert("保存失败，请重试");
@@ -761,6 +738,10 @@ class DocumentScanner {
           alert("透视变换失败，请重试");
         }
       }
+
+      // 在确认裁剪后禁用拍摄按钮
+      this.captureBtn.disabled = true;
+      this.isCameraActive = false;
     } catch (err) {
       console.error("处理失败:", err);
       alert("处理失败，请重试");
@@ -901,6 +882,20 @@ class DocumentScanner {
   // 检查是否有处理完成的图片
   hasProcessedImages() {
     return this.imageHistory.some((img) => img.isProcessed);
+  }
+
+  // 可选：添加取消编辑的功能
+  cancelEdit() {
+    if (this.currentEditor) {
+      this.currentEditor.remove();
+      this.currentEditor = null;
+      this.preview.innerHTML = "";
+      this.confirmBtn.style.display = "none";
+      this.saveBtn.disabled = true;
+      // 恢复拍摄功能
+      this.captureBtn.disabled = false;
+      this.isCameraActive = true;
+    }
   }
 }
 
