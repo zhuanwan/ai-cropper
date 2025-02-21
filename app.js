@@ -44,13 +44,13 @@ class DocumentScanner {
       this.video.srcObject = this.stream;
     } catch (err) {
       console.error("相机访问失败:", err);
-      //   if (err.name === "NotAllowedError") {
-      //     alert("无法访问相机：权限被拒绝。请在浏览器设置中允许访问相机。");
-      //   } else if (err.name === "NotFoundError") {
-      //     alert("未检测到相机设备，您可以通过'上传图片'功能继续使用。");
-      //   } else {
-      //     alert("相机访问失败：" + err.message + "\n您可以通过'上传图片'功能继续使用。");
-      //   }
+        if (err.name === "NotAllowedError") {
+          alert("无法访问相机：权限被拒绝。请在浏览器设置中允许访问相机。");
+        } else if (err.name === "NotFoundError") {
+          alert("未检测到相机设备，您可以通过'上传图片'功能继续使用。");
+        } else {
+          alert("相机访问失败：" + err.message + "\n您可以通过'上传图片'功能继续使用。");
+        }
       throw err;
     }
   }
@@ -364,27 +364,42 @@ class DocumentScanner {
 
   async editHistoryImage(imageSrc) {
     try {
-      const img = await this.loadImage(imageSrc);
+      // 创建新的图片对象
+      const img = new Image();
 
-      // 初始化四个角点
-      const corners = [
-        { x: 0, y: 0 },
-        { x: img.width, y: 0 },
-        { x: img.width, y: img.height },
-        { x: 0, y: img.height },
-      ];
+      // 使用 Promise 等待图片加载完成
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = imageSrc;
+      });
 
       // 清除预览区域
       this.preview.innerHTML = "";
 
-      // 创建编辑器
-      this.createDocumentEditor(img, corners);
+      // 重置按钮状态
+      this.confirmBtn.style.display = "inline-block";
+      this.saveBtn.disabled = true;
+      this.captureBtn.disabled = false;
+      this.uploadBtn.disabled = false;
 
-      // 显示相关按钮
-      this.confirmBtn.style.display = "none";
-      this.saveBtn.disabled = false;
+      // 创建一个临时 canvas 来处理图片数据
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = img.naturalWidth;
+      tempCanvas.height = img.naturalHeight;
+      const ctx = tempCanvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+
+      // 获取新的图片数据
+      const newImgSrc = tempCanvas.toDataURL("image/jpeg", 1.0);
+      const newImg = new Image();
+      newImg.src = newImgSrc;
+
+      // 创建编辑器
+      this.createDocumentEditor(newImg);
     } catch (err) {
       console.error("编辑历史图片失败:", err);
+      alert("加载图片失败，请重试");
     }
   }
 
@@ -517,7 +532,7 @@ class DocumentScanner {
     imgElement.src = img.src;
     imgContainer.appendChild(imgElement);
 
-    // 等待图片加载完成后再创建控制点
+    // 修改图片加载完成后的处理
     imgElement.onload = () => {
       const imageRect = imgElement.getBoundingClientRect();
       const scale = img.naturalWidth / imageRect.width;
@@ -526,9 +541,9 @@ class DocumentScanner {
       if (!corners) {
         corners = [
           { x: 0, y: 0 },
-          { x: img.naturalWidth, y: 0 },
-          { x: img.naturalWidth, y: img.naturalHeight },
-          { x: 0, y: img.naturalHeight },
+          { x: imageRect.width, y: 0 },
+          { x: imageRect.width, y: imageRect.height },
+          { x: 0, y: imageRect.height },
         ];
       }
 
@@ -540,8 +555,8 @@ class DocumentScanner {
       corners.forEach((corner, index) => {
         const handle = document.createElement("div");
         handle.className = "corner-handle";
-        handle.style.left = `${corner.x / scale}px`;
-        handle.style.top = `${corner.y / scale}px`;
+        handle.style.left = `${corner.x}px`;
+        handle.style.top = `${corner.y}px`;
         this.makeHandleDraggable(handle, imgElement, scale);
         handleContainer.appendChild(handle);
       });
@@ -553,6 +568,9 @@ class DocumentScanner {
 
       imgContainer.appendChild(handleContainer);
       this.updateDocumentOutline(handleContainer);
+
+      // 显示确认按钮
+      this.confirmBtn.style.display = "inline-block";
     };
 
     editor.appendChild(imgContainer);
@@ -724,19 +742,18 @@ class DocumentScanner {
           // 获取图片URL
           const imgUrl = canvas.toDataURL("image/jpeg");
 
-          // 更新编辑器中的图片
-          imgElement.src = imgUrl;
+          // 清除当前编辑器
+          this.currentEditor.remove();
 
-          // 隐藏控制点和轮廓线
-          const handleContainer = this.currentEditor.querySelector(".corner-handle-container");
-          if (handleContainer) {
-            handleContainer.style.display = "none";
-          }
+          // 创建新的编辑器实例
+          const newImg = new Image();
+          newImg.onload = () => {
+            this.createDocumentEditor(newImg);
+          };
+          newImg.src = imgUrl;
 
           // 启用保存按钮
           this.saveBtn.disabled = false;
-          // 隐藏确认按钮
-          this.confirmBtn.style.display = "none";
 
           // 清理内存
           processedMat.delete();
@@ -745,10 +762,6 @@ class DocumentScanner {
           alert("透视变换失败，请重试");
         }
       }
-
-      // 在确认裁剪后禁用拍摄按钮
-      this.captureBtn.disabled = true;
-      this.isCameraActive = false;
     } catch (err) {
       console.error("处理失败:", err);
       alert("处理失败，请重试");
@@ -915,3 +928,41 @@ window.onload = function () {
     console.error("OpenCV.js 加载失败");
   }
 };
+
+function confirmCrop() {
+  // ... 现有的裁剪确认代码 ...
+
+  // 在确认裁剪后重置状态
+  resetCropState();
+}
+
+// 添加一个新的重置状态的函数
+function resetCropState() {
+  // 重置所有点击事件监听
+  const preview = document.getElementById("preview");
+  preview.innerHTML = ""; // 清空预览区域
+
+  // 重置按钮状态
+  document.getElementById("confirmBtn").style.display = "none";
+  document.getElementById("uploadBtn").disabled = false;
+  document.getElementById("captureBtn").disabled = false;
+  document.getElementById("saveBtn").disabled = false;
+
+  // 重置裁剪点数组
+  points = [];
+  currentPoint = null;
+
+  // 移除之前的事件监听器
+  preview.removeEventListener("click", handlePreviewClick);
+  preview.removeEventListener("mousemove", handlePreviewMouseMove);
+
+  // 重新添加事件监听器
+  preview.addEventListener("click", handlePreviewClick);
+  preview.addEventListener("mousemove", handlePreviewMouseMove);
+}
+
+// 在处理新图片时（无论是上传还是拍摄）都调用重置函数
+function handleNewImage(imageData) {
+  resetCropState();
+  // ... 现有的图片处理代码 ...
+}
