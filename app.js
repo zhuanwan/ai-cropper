@@ -35,26 +35,62 @@ class DocumentScanner {
         throw new Error("浏览器不支持访问相机");
       }
 
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      // 获取设备支持的所有相机能力
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter((device) => device.kind === "videoinput");
+
+      // 尝试获取后置相机（如果有多个相机）
+      const backCamera = videoDevices.find(
+        (device) =>
+          device.label.toLowerCase().includes("back") || device.label.toLowerCase().includes("rear")
+      );
+
+      const constraints = {
         video: {
-          facingMode: "environment",
-          width: { ideal: 4096 }, // 设置理想的宽度
-          height: { ideal: 2160 }, // 设置理想的高度
-          aspectRatio: { ideal: 1.7777777778 }, // 16:9
-          frameRate: { ideal: 30 },
-          // 请求最高质量
+          deviceId: backCamera ? { exact: backCamera.deviceId } : undefined,
+          facingMode: backCamera ? undefined : "environment",
+          width: { ideal: 4096, min: 1920 },
+          height: { ideal: 2160, min: 1080 },
+          // 使用更高的比特率和更好的图像处理
           advanced: [
             {
-              width: { min: 1920 },
-              height: { min: 1080 },
+              width: { min: 1920, ideal: 4096 },
+              height: { min: 1080, ideal: 2160 },
+              aspectRatio: 1.777777778,
+              frameRate: { max: 30, ideal: 24 },
+              // 添加更多高级设置
+              exposureMode: "manual",
+              focusMode: "continuous",
+              whiteBalanceMode: "continuous",
             },
           ],
         },
-      });
+      };
+
+      this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // 获取视频轨道并设置更高的约束
+      const videoTrack = this.stream.getVideoTracks()[0];
+      const capabilities = videoTrack.getCapabilities();
+
+      // 如果相机支持，设置更高级的参数
+      const settings = {
+        exposureMode: "manual",
+        exposureTime: capabilities.exposureTime?.max,
+        focusMode: "continuous",
+        whiteBalance: "continuous",
+        brightness: capabilities.brightness?.max,
+        sharpness: capabilities.sharpness?.max,
+        saturation: capabilities.saturation?.max,
+        iso: capabilities.iso?.max,
+      };
+
+      await videoTrack.applyConstraints({ advanced: [settings] });
 
       this.video.srcObject = this.stream;
+      this.video.setAttribute("playsinline", true);
 
-      // 等待视频加载完成
+      // 等待视频完全加载
       await new Promise((resolve) => {
         this.video.onloadedmetadata = () => {
           this.video.play();
@@ -268,24 +304,35 @@ class DocumentScanner {
     if (!this.isCameraActive) return;
 
     try {
-      const context = this.canvas.getContext("2d");
-      this.canvas.width = this.video.videoWidth;
-      this.canvas.height = this.video.videoHeight;
+      // 创建离屏canvas以获得更高质量
+      const offscreenCanvas = document.createElement("canvas");
+      const context = offscreenCanvas.getContext("2d", {
+        alpha: false,
+        desynchronized: true,
+        willReadFrequently: true,
+      });
 
-      // 设置更好的图像渲染质量
+      // 使用视频的原始分辨率
+      offscreenCanvas.width = this.video.videoWidth;
+      offscreenCanvas.height = this.video.videoHeight;
+
+      // 应用高质量设置
       context.imageSmoothingEnabled = true;
       context.imageSmoothingQuality = "high";
 
-      // 使用更高质量的绘制设置
-      context.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+      // 优化图像锐度
+      context.filter = "contrast(1.1) saturate(1.2) sharpen(1)";
 
-      // 获取高质量的图像数据
+      // 绘制视频帧
+      context.drawImage(this.video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+
+      // 创建高质量图像
       const highQualityImage = new Image();
       await new Promise((resolve, reject) => {
         highQualityImage.onload = resolve;
         highQualityImage.onerror = reject;
-        // 使用最高质量的JPEG编码
-        highQualityImage.src = this.canvas.toDataURL("image/jpeg", 1.0);
+        // 使用PNG格式以保持最高质量
+        highQualityImage.src = offscreenCanvas.toDataURL("image/png", 1.0);
       });
 
       // 清除预览区域
