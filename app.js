@@ -31,7 +31,6 @@ class DocumentScanner {
 
   async initializeCamera() {
     try {
-      // 检查是否支持 getUserMedia
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("浏览器不支持访问相机");
       }
@@ -39,9 +38,29 @@ class DocumentScanner {
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "environment",
+          width: { ideal: 4096 }, // 设置理想的宽度
+          height: { ideal: 2160 }, // 设置理想的高度
+          aspectRatio: { ideal: 1.7777777778 }, // 16:9
+          frameRate: { ideal: 30 },
+          // 请求最高质量
+          advanced: [
+            {
+              width: { min: 1920 },
+              height: { min: 1080 },
+            },
+          ],
         },
       });
+
       this.video.srcObject = this.stream;
+
+      // 等待视频加载完成
+      await new Promise((resolve) => {
+        this.video.onloadedmetadata = () => {
+          this.video.play();
+          resolve();
+        };
+      });
     } catch (err) {
       console.error("相机访问失败:", err);
       if (err.name === "NotAllowedError") {
@@ -253,28 +272,27 @@ class DocumentScanner {
       this.canvas.width = this.video.videoWidth;
       this.canvas.height = this.video.videoHeight;
 
-      if (!this.canvas.width || !this.canvas.height) {
-        throw new Error("无效的视频尺寸");
-      }
+      // 设置更好的图像渲染质量
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
 
-      context.drawImage(this.video, 0, 0);
+      // 使用更高质量的绘制设置
+      context.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
 
-      // 获取图像数据
-      const imgData = context.getImageData(0, 0, this.canvas.width, this.canvas.height);
-
-      // 创建图片元素并等待加载
-      const img = new Image();
+      // 获取高质量的图像数据
+      const highQualityImage = new Image();
       await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = this.canvas.toDataURL("image/jpeg");
+        highQualityImage.onload = resolve;
+        highQualityImage.onerror = reject;
+        // 使用最高质量的JPEG编码
+        highQualityImage.src = this.canvas.toDataURL("image/jpeg", 1.0);
       });
 
       // 清除预览区域
       this.preview.innerHTML = "";
 
-      // 创建编辑器
-      this.createDocumentEditor(img);
+      // 创建编辑器时传入高质量图片
+      this.createDocumentEditor(highQualityImage);
 
       // 显示确认按钮
       this.confirmBtn.style.display = "inline-block";
@@ -285,7 +303,7 @@ class DocumentScanner {
 
       // 添加到历史记录
       this.imageHistory.push({
-        src: img.src,
+        src: highQualityImage.src,
         isProcessed: false,
       });
       this.currentImageIndex = this.imageHistory.length - 1;
