@@ -44,13 +44,13 @@ class DocumentScanner {
       this.video.srcObject = this.stream;
     } catch (err) {
       console.error("相机访问失败:", err);
-        if (err.name === "NotAllowedError") {
-          alert("无法访问相机：权限被拒绝。请在浏览器设置中允许访问相机。");
-        } else if (err.name === "NotFoundError") {
-          alert("未检测到相机设备，您可以通过'上传图片'功能继续使用。");
-        } else {
-          alert("相机访问失败：" + err.message + "\n您可以通过'上传图片'功能继续使用。");
-        }
+      if (err.name === "NotAllowedError") {
+        alert("无法访问相机：权限被拒绝。请在浏览器设置中允许访问相机。");
+      } else if (err.name === "NotFoundError") {
+        alert("未检测到相机设备，您可以通过'上传图片'功能继续使用。");
+      } else {
+        alert("相机访问失败：" + err.message + "\n您可以通过'上传图片'功能继续使用。");
+      }
       throw err;
     }
   }
@@ -303,18 +303,18 @@ class DocumentScanner {
 
     try {
       // 创建临时 canvas 以更高质量保存图片
-      const tempCanvas = document.createElement('canvas');
+      const tempCanvas = document.createElement("canvas");
       tempCanvas.width = imgElement.naturalWidth;
       tempCanvas.height = imgElement.naturalHeight;
-      const ctx = tempCanvas.getContext('2d');
-      
+      const ctx = tempCanvas.getContext("2d");
+
       // 使用更好的图像渲染设置
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
+      ctx.imageSmoothingQuality = "high";
       ctx.drawImage(imgElement, 0, 0);
 
       // 使用更高质量的图片格式和设置
-      const highQualityImageUrl = tempCanvas.toDataURL('image/jpeg', 1.0);
+      const highQualityImageUrl = tempCanvas.toDataURL("image/jpeg", 1.0);
 
       if (this.editingImageIndex !== undefined) {
         this.savedImages.splice(this.editingImageIndex, 1);
@@ -326,7 +326,7 @@ class DocumentScanner {
       historyItem.className = "history-item";
 
       const img = document.createElement("img");
-      img.src = highQualityImageUrl;  // 使用高质量图片
+      img.src = highQualityImageUrl; // 使用高质量图片
 
       // 创建删除按钮
       const deleteBtn = document.createElement("div");
@@ -417,60 +417,70 @@ class DocumentScanner {
 
   async saveToPDF() {
     if (this.savedImages.length === 0) {
-        alert("没有可下载的图片");
-        return;
+      alert("没有可下载的图片");
+      return;
     }
 
     try {
-        const { jsPDF } = window.jspdf;
-        // 创建 A4 大小的 PDF，使用更高质量的设置
-        const doc = new jsPDF({
-            orientation: "portrait",
-            unit: "mm",
-            format: "a4",
-            compress: false // 禁用压缩以保持图片质量
-        });
+      const { jsPDF } = window.jspdf;
+      // 创建 A4 大小的 PDF，使用更高质量的设置
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: false, // 禁用压缩以保持图片质量
+      });
 
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 10;
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 10;
 
-        for (let i = 0; i < this.savedImages.length; i++) {
-            if (i > 0) doc.addPage();
+      for (let i = 0; i < this.savedImages.length; i++) {
+        if (i > 0) doc.addPage();
 
-            // 加载图片并等待
-            const tempImg = await this.loadImage(this.savedImages[i]);
-            
-            // 计算图片的原始宽高比
-            const imgRatio = tempImg.width / tempImg.height;
-            
-            // 计算可用空间
-            const availableWidth = pageWidth - 2 * margin;
-            const availableHeight = pageHeight - 2 * margin;
-            
-            // 计算最佳适配尺寸
-            let finalWidth, finalHeight;
-            if (imgRatio > availableWidth / availableHeight) {
-                finalWidth = availableWidth;
-                finalHeight = finalWidth / imgRatio;
-            } else {
-                finalHeight = availableHeight;
-                finalWidth = finalHeight * imgRatio;
-            }
+        // 加载图片并等待
+        const tempImg = await this.loadImage(this.savedImages[i]);
 
-            // 计算居中位置
-            const x = margin + (availableWidth - finalWidth) / 2;
-            const y = margin + (availableHeight - finalHeight) / 2;
+        // 计算图片的原始宽高比
+        const imgRatio = tempImg.width / tempImg.height;
 
-            // 添加图片到 PDF，使用更高的图片质量设置
-            doc.addImage(this.savedImages[i], "JPEG", x, y, finalWidth, finalHeight, undefined, 'FAST', 0);
+        // 计算可用空间
+        const availableWidth = pageWidth - 2 * margin;
+        const availableHeight = pageHeight - 2 * margin;
+
+        // 计算最佳适配尺寸
+        let finalWidth, finalHeight;
+        if (imgRatio > availableWidth / availableHeight) {
+          finalWidth = availableWidth;
+          finalHeight = finalWidth / imgRatio;
+        } else {
+          finalHeight = availableHeight;
+          finalWidth = finalHeight * imgRatio;
         }
 
-        // 保存 PDF
-        doc.save("scanned_document.pdf");
+        // 计算居中位置
+        const x = margin + (availableWidth - finalWidth) / 2;
+        const y = margin + (availableHeight - finalHeight) / 2;
+
+        // 添加图片到 PDF，使用更高的图片质量设置
+        doc.addImage(
+          this.savedImages[i],
+          "JPEG",
+          x,
+          y,
+          finalWidth,
+          finalHeight,
+          undefined,
+          "FAST",
+          0
+        );
+      }
+
+      // 保存 PDF
+      doc.save("scanned_document.pdf");
     } catch (err) {
-        console.error("PDF生成失败:", err);
-        alert("PDF生成失败，请重试");
+      console.error("PDF生成失败:", err);
+      alert("PDF生成失败，请重试");
     }
   }
 
@@ -796,11 +806,19 @@ class DocumentScanner {
       const width = Math.max(
         Math.sqrt(
           Math.pow(corners[1].x - corners[0].x, 2) + Math.pow(corners[1].y - corners[0].y, 2)
+        ),
+        Math.sqrt(
+          Math.pow(corners[2].x - corners[3].x, 2) + Math.pow(corners[2].y - corners[3].y, 2)
+        )
       );
 
       const height = Math.max(
         Math.sqrt(
           Math.pow(corners[3].x - corners[0].x, 2) + Math.pow(corners[3].y - corners[0].y, 2)
+        ),
+        Math.sqrt(
+          Math.pow(corners[2].x - corners[1].x, 2) + Math.pow(corners[2].y - corners[1].y, 2)
+        )
       );
 
       // 设置变换矩阵
